@@ -82,9 +82,9 @@ Resources:
           IncludeCookies: false
           Prefix: 'cdn/'
         Origins:
-          - CustomOriginConfig:
+          - DomainName: !Sub '${StaticBucketResource}.s3-website.${AWS::Region}.amazonaws.com'
+            CustomOriginConfig:
               OriginProtocolPolicy: http-only
-            DomainName: !GetAtt 'StaticBucketResource.WebsiteURL'
             Id: !Sub '${Prefix}-${Env}-static-website-origin'
         PriceClass: 'PriceClass_All'
 
