@@ -35,12 +35,12 @@ Resources:
   StaticBucketBucketPolicy:
     Type: "AWS::S3::BucketPolicy"
     Properties:
-      Bucket: !Ref Bucket
+      Bucket: !Ref StaticBucketResource
       PolicyDocument:
         Statement:
         - Action: "s3:GetObject"
           Effect: Allow
-          Resource: !Sub "arn:aws:s3:::${Bucket}/*"
+          Resource: !Sub "arn:aws:s3:::${StaticBucketResource}/*"
           Principal: '*'
   #######################################
   # Blog static file CloudFront CDN
