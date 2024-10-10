@@ -26,30 +26,22 @@ Resources:
     Type: AWS::S3::Bucket
     Properties:
       BucketName: !Sub '${Prefix}-${Env}-static'
-      BucketEncryption:
-        ServerSideEncryptionConfiguration:
-          - ServerSideEncryptionByDefault:
-              SSEAlgorithm: AES256
+      AccessControl: PublicRead
+      WebsiteConfiguration:
+        IndexDocument: index.html
       LoggingConfiguration:
         DestinationBucketName: !Ref 'StaticLogsBucketLogs'
         LogFilePrefix: 'origin/'
   StaticBucketBucketPolicy:
-    Type: AWS::S3::BucketPolicy
+    Type: "AWS::S3::BucketPolicy"
     Properties:
-      Bucket: !Ref StaticBucketResource
+      Bucket: !Ref Bucket
       PolicyDocument:
-        Version: '2012-10-17'
         Statement:
-          - Action: s3:GetObject
-            Principal:
-              Service: 'cloudfront.amazonaws.com'
-            Effect: Allow
-            Resource:
-              - !Sub "${StaticBucketResource.Arn}"
-              - !Sub "${StaticBucketResource.Arn}/*"
-            Condition:
-              StringEquals:
-                'AWS:SourceArn': !Sub 'arn:aws:cloudfront::${AWS::AccountId}:distribution/${CloudFrontDistribution}'
+        - Action: "s3:GetObject"
+          Effect: Allow
+          Resource: !Sub "arn:aws:s3:::${Bucket}/*"
+          Principal: '*'
   #######################################
   # Blog static file CloudFront CDN
   #######################################
@@ -59,11 +51,18 @@ Resources:
       DistributionConfig:
         DefaultCacheBehavior:
           Compress: true
-          DefaultTTL: 86400
+          AllowedMethods:
+          - GET
+          - HEAD
+          CachedMethods:
+          - GET
+          - HEAD
           ForwardedValues:
             QueryString: true
-          MaxTTL: 31536000
-          TargetOriginId: !Sub '${Prefix}-${Env}-static-cdn-origin'
+          MinTTL: 60
+          MaxTTL: 86400
+          DefaultTTL: 3600
+          TargetOriginId: !Sub '${Prefix}-${Env}-static-website-origin'
           ViewerProtocolPolicy: 'redirect-to-https'
           ResponseHeadersPolicyId: !Ref ResponseHeadersPolicy
         CustomErrorResponses:
@@ -84,47 +83,12 @@ Resources:
           IncludeCookies: false
           Prefix: 'cdn/'
         Origins:
-          - DomainName: !GetAtt 'StaticBucketResource.DomainName'
-            Id: !Sub '${Prefix}-${Env}-static-cdn-origin'
-            OriginAccessControlId: !Ref OriginAccessControl
-            S3OriginConfig: {}
+          - CustomOriginConfig:
+              OriginProtocolPolicy: http-only
+            DomainName: !GetAtt 'StaticBucketResource.WebsiteURL'
+            Id: !Sub '${Prefix}-${Env}-static-website-origin'
         PriceClass: 'PriceClass_All'
-  OriginAccessControl:
-    Type: AWS::CloudFront::OriginAccessControl
-    Properties:
-      OriginAccessControlConfig:
-        # Get a unique ID for the OAC Config name.
-        # Name must be unique within account
-        Name: !Sub '${Prefix}-${Env}-static-cdn-oac'
-        OriginAccessControlOriginType: s3
-        SigningBehavior: always
-        SigningProtocol: sigv4
-  ResponseHeadersPolicy:
-    Type: AWS::CloudFront::ResponseHeadersPolicy
-    Properties:
-      ResponseHeadersPolicyConfig:
-        Name: !Sub '${Prefix}-${Env}-static-site-security-headers'
-        SecurityHeadersConfig:
-          StrictTransportSecurity:
-            AccessControlMaxAgeSec: 63072000
-            IncludeSubdomains: true
-            Override: true
-            Preload: true
-          ContentSecurityPolicy:
-            ContentSecurityPolicy: "default-src 'none'; img-src 'self'; script-src 'self'; style-src 'self'; object-src 'none'"
-            Override: true
-          ContentTypeOptions:
-            Override: true
-          FrameOptions:
-            FrameOption: DENY
-            Override: true
-          ReferrerPolicy:
-            ReferrerPolicy: 'same-origin'
-            Override: true
-          XSSProtection:
-            ModeBlock: true
-            Override: true
-            Protection: true
+
   #######################################
   # Blog static file generate lambda layer 
   #######################################
