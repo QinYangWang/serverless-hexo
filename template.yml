@@ -80,11 +80,11 @@ Resources:
         DefaultRootObject: 'index.html'
         IPV6Enabled: true
         Logging:
-          Bucket: !Ref 'StaticLogsBucketLogs.DomainName'
+          Bucket: !GetAtt 'StaticLogsBucketLogs.DomainName'
           IncludeCookies: false
           Prefix: 'cdn/'
         Origins:
-          - DomainName: !Ref 'StaticBucketResource.DomainName'
+          - DomainName: !GetAtt 'StaticBucketResource.DomainName'
             Id: !Sub '${Prefix}-${Env}-static-cdn-origin'
             OriginAccessControlId: !Ref OriginAccessControl
             S3OriginConfig: {}
