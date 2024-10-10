@@ -1,0 +1,48 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Parameters:
+  Prefix:
+    Type: String
+    Description: Resource name prefix.
+  Env:
+    Type: String
+    Description: Resource deployment environment.
+Resources:
+  #######################################
+  # Blog static file storage S3 bucket
+  #######################################
+  StaticBucketResource:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub ${Prefix}-${Env}-static
+  #######################################
+  # Blog static file generate lambda layer 
+  #######################################
+  HexoLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      Description: hexo and hexo plugin
+      ContentUri: layers/hexo
+      CompatibleRuntimes:
+        - nodejs20.x
+      RetentionPolicy: Delete
+    Metadata:
+      BuildMethod: nodejs20.x
+  #######################################
+  # Blog static file generate lambda 
+  #######################################
+  StaticGeneratorFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "${Prefix}-${Env}-static-lambda"
+      CodeUri: functions/staticgenerator
+      Handler: app.handler
+      Runtime: nodejs20.x
+      Architectures:
+        - x86_64
+      Layers:
+        - !Ref HexoLayer
+      Timeout: 300
+      Environment:
+        Variables:
+          BUCKET_NAME: !Ref StaticBucketResource
