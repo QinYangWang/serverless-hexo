@@ -11,68 +11,120 @@ Resources:
   #######################################
   # Blog static file storage S3 bucket
   #######################################
+  StaticLogsBucketLogs:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub '${Prefix}-${Env}-static-logs'
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerPreferred
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
   StaticBucketResource:
     Type: AWS::S3::Bucket
     Properties:
-      BucketName: !Sub ${Prefix}-${Env}-static
+      BucketName: !Sub '${Prefix}-${Env}-static'
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      LoggingConfiguration:
+        DestinationBucketName: !Ref 'StaticLogsBucketLogs'
+        LogFilePrefix: 'origin/'
+  StaticBucketBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref StaticBucketResource
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Action: s3:GetObject
+            Principal:
+              Service: 'cloudfront.amazonaws.com'
+            Effect: Allow
+            Resource:
+              - !Sub "${StaticBucketResource.Arn}"
+              - !Sub "${StaticBucketResource.Arn}/*"
+            Condition:
+              StringEquals:
+                'AWS:SourceArn': !Sub 'arn:aws:cloudfront::${AWS::AccountId}:distribution/${CloudFrontDistribution}'
   #######################################
   # Blog static file CloudFront CDN
   #######################################
-    CloudFrontOriginAccessIdentity:
-        Type: "AWS::CloudFront::CloudFrontOriginAccessIdentity"
-        Properties:
-            CloudFrontOriginAccessIdentityConfig:
-                Comment: !Ref StaticBucketResource
-    ReadPolicy:
-        Type: "AWS::S3::BucketPolicy"
-        Properties:
-            Bucket: !Ref StaticBucketResource
-            PolicyDocument:
-                Statement:
-                    - Action: "s3:GetObject"
-                      Effect: Allow
-                      Resource:
-                          - !Sub "${StaticBucketResource.Arn}"
-                          - !Sub "${StaticBucketResource.Arn}/*"
-                      Principal:
-                          CanonicalUser: !GetAtt CloudFrontOriginAccessIdentity.S3CanonicalUserId
-    CloudFrontDistribution:
-        Type: "AWS::CloudFront::Distribution"
-        Properties:
-            DistributionConfig:
-                CustomErrorResponses:
-                    - ErrorCode: 403
-                      ResponseCode: 404
-                      ResponsePagePath: !Ref ErrorPagePath
-                DefaultCacheBehavior:
-                    AllowedMethods:
-                        - GET
-                        - HEAD
-                        - OPTIONS
-                    CachedMethods:
-                        - GET
-                        - HEAD
-                        - OPTIONS
-                    Compress: true
-                    DefaultTTL: 3600
-                    ForwardedValues:
-                        Cookies:
-                            Forward: none
-                        QueryString: false
-                    MaxTTL: 86400
-                    MinTTL: 60
-                    TargetOriginId: s3origin
-                    ViewerProtocolPolicy: redirect-to-https
-                DefaultRootObject: "index.html"
-                Enabled: true
-                HttpVersion: http2
-                Origins:
-                    - DomainName: !GetAtt StaticBucketResource.DomainName
-                      Id: s3origin
-                      S3OriginConfig:
-                          OriginAccessIdentity: !Sub >-
-                              origin-access-identity/cloudfront/${CloudFrontOriginAccessIdentity}
-                PriceClass: PriceClass_All
+  CloudFrontDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        DefaultCacheBehavior:
+          Compress: true
+          DefaultTTL: 86400
+          ForwardedValues:
+            QueryString: true
+          MaxTTL: 31536000
+          TargetOriginId: !Sub '${Prefix}-${Env}-static-cdn-origin'
+          ViewerProtocolPolicy: 'redirect-to-https'
+          ResponseHeadersPolicyId: !Ref ResponseHeadersPolicy
+        CustomErrorResponses:
+          - ErrorCachingMinTTL: 60
+            ErrorCode: 404
+            ResponseCode: 404
+            ResponsePagePath: '/404.html'
+          - ErrorCachingMinTTL: 60
+            ErrorCode: 403
+            ResponseCode: 403
+            ResponsePagePath: '/403.html'
+        Enabled: true
+        HttpVersion: 'http2'
+        DefaultRootObject: 'index.html'
+        IPV6Enabled: true
+        Logging:
+          Bucket: !Ref 'StaticLogsBucketLogs'
+          IncludeCookies: false
+          Prefix: 'cdn/'
+        Origins:
+          - DomainName: !Ref 'StaticBucketResource'
+            Id: !Sub '${Prefix}-${Env}-static-cdn-origin'
+            OriginAccessControlId: !Ref OriginAccessControl
+            S3OriginConfig: {}
+        PriceClass: 'PriceClass_All'
+  OriginAccessControl:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        # Get a unique ID for the OAC Config name.
+        # Name must be unique within account
+        Name: !Sub '${Prefix}-${Env}-static-cdn-oac'
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+  ResponseHeadersPolicy:
+    Type: AWS::CloudFront::ResponseHeadersPolicy
+    Properties:
+      ResponseHeadersPolicyConfig:
+        Name: !Sub '${Prefix}-${Env}-static-site-security-headers'
+        SecurityHeadersConfig:
+          StrictTransportSecurity:
+            AccessControlMaxAgeSec: 63072000
+            IncludeSubdomains: true
+            Override: true
+            Preload: true
+          ContentSecurityPolicy:
+            ContentSecurityPolicy: "default-src 'none'; img-src 'self'; script-src 'self'; style-src 'self'; object-src 'none'"
+            Override: true
+          ContentTypeOptions:
+            Override: true
+          FrameOptions:
+            FrameOption: DENY
+            Override: true
+          ReferrerPolicy:
+            ReferrerPolicy: 'same-origin'
+            Override: true
+          XSSProtection:
+            ModeBlock: true
+            Override: true
+            Protection: true
   #######################################
   # Blog static file generate lambda layer 
   #######################################
