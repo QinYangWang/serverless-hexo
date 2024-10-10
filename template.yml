@@ -64,7 +64,6 @@ Resources:
           DefaultTTL: 3600
           TargetOriginId: !Sub '${Prefix}-${Env}-static-website-origin'
           ViewerProtocolPolicy: 'redirect-to-https'
-          ResponseHeadersPolicyId: !Ref ResponseHeadersPolicy
         CustomErrorResponses:
           - ErrorCachingMinTTL: 60
             ErrorCode: 404
